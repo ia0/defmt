@@ -34,9 +34,10 @@ gimli = { version = "0.27", default-features = false, features = [
     "read",
     "std",
 ] }
-object = { version = "0.30", default-features = false, features = [
+object = { path = "../../object", default-features = false, features = [
     "read_core",
     "elf",
+    "wasm",
     "std",
 ] }
 serde = { version = "1", features = ["derive"] }

@@ -15,7 +15,7 @@ use std::{
 
 use crate::{BitflagsKey, StringEntry, Table, TableEntry, Tag, DEFMT_VERSION};
 use anyhow::{anyhow, bail, ensure};
-use object::{Object, ObjectSection, ObjectSymbol};
+use object::{BinaryFormat, Object, ObjectSection, ObjectSymbol, SectionIndex};
 
 pub fn parse_impl(elf: &[u8], check_version: bool) -> Result<Option<Table>, anyhow::Error> {
     let elf = object::File::parse(elf)?;
@@ -79,7 +79,13 @@ pub fn parse_impl(elf: &[u8], check_version: bool) -> Result<Option<Table>, anyh
     // NOTE: We need to make sure to return `Ok(None)`, not `Err`, when defmt is not in use.
     // Otherwise probe-run won't work with apps that don't use defmt.
 
-    let defmt_section = elf.section_by_name(".defmt");
+    let is_wasm = matches!(elf.format(), BinaryFormat::Wasm);
+    let defmt_section = if is_wasm {
+        // For some reason, globals are in the data section (index 11).
+        Some(elf.section_by_index(SectionIndex(11))?)
+    } else {
+        elf.section_by_name(".defmt")
+    };
 
     let (defmt_section, version) = match (defmt_section, version) {
         (None, None) => return Ok(None), // defmt is not used
@@ -123,7 +129,13 @@ pub fn parse_impl(elf: &[u8], check_version: bool) -> Result<Option<Table>, anyh
         }
 
         if entry.section_index() == Some(defmt_section.index()) {
-            let sym = symbol::Symbol::demangle(name)?;
+            let sym = match symbol::Symbol::demangle(name) {
+                Ok(x) => x,
+                // TODO: We could check if there is an associated custom section and return the
+                // error if that's the case.
+                Err(_) if is_wasm => continue,
+                error @ Err(_) => error?,
+            };
             match sym.tag() {
                 symbol::SymbolTag::Defmt(Tag::Timestamp) => {
                     if timestamp.is_some() {
@@ -180,7 +192,7 @@ pub fn parse_impl(elf: &[u8], check_version: bool) -> Result<Option<Table>, anyh
                 }
                 symbol::SymbolTag::Defmt(tag) => {
                     map.insert(
-                        entry.address() as usize,
+                        entry.address() as u16 as usize,
                         TableEntry::new(
                             StringEntry::new(tag, sym.data().to_string()),
                             name.to_string(),

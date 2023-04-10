@@ -1,6 +1,6 @@
 TARGET = wasm32-unknown-unknown
 MODULE = target/$(TARGET)/release/wasm.wasm
-TOOLCHAIN = nightly-2023-03-28-x86_64-unknown-linux-gnu
+TOOLCHAIN = nightly
 
 .PHONY: run
 run:
